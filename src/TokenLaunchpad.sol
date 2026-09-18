@@ -8,10 +8,6 @@ interface IERC20 {
 }
 
 contract TokenLaunchpad {
-    /*//////////////////////////////////////////////////////////////
-                                ERRORS
-    //////////////////////////////////////////////////////////////*/
-
     error ZeroAddress();
     error NotOwner();
 
@@ -43,10 +39,6 @@ contract TokenLaunchpad {
     error ETHTransferFailed();
     error ReentrantCall();
 
-    /*//////////////////////////////////////////////////////////////
-                                EVENTS
-    //////////////////////////////////////////////////////////////*/
-
     event SaleCreated(uint256 indexed saleId, address indexed creator, address indexed token);
 
     event TokensPurchased(uint256 indexed saleId, address indexed buyer, uint256 ethPaid, uint256 tokensPurchased);
@@ -59,10 +51,6 @@ contract TokenLaunchpad {
 
     event UnsoldTokensRecovered(uint256 indexed saleId, address indexed creator, uint256 amount);
 
-    /*//////////////////////////////////////////////////////////////
-                            STATE VARIABLES
-    //////////////////////////////////////////////////////////////*/
-
     uint256 public constant BPS = 10_000;
 
     address public immutable owner;
@@ -73,13 +61,7 @@ contract TokenLaunchpad {
 
     uint256 public nextSaleId;
 
-    // 1 = unlocked
-    // 2 = locked
     uint256 private locked = 1;
-
-    /*//////////////////////////////////////////////////////////////
-                                SALE
-    //////////////////////////////////////////////////////////////*/
 
     struct Sale {
         address creator;
@@ -96,21 +78,13 @@ contract TokenLaunchpad {
         bool unsoldRecovered;
     }
 
-    // Private to avoid generating a large automatic getter.
     mapping(uint256 => Sale) private sales;
 
-    // saleId => buyer => ETH contributed
     mapping(uint256 => mapping(address => uint256)) public contributions;
 
-    // saleId => buyer => token amount purchased
     mapping(uint256 => mapping(address => uint256)) public purchasedTokens;
 
-    // saleId => buyer => claimed
     mapping(uint256 => mapping(address => bool)) public hasClaimed;
-
-    /*//////////////////////////////////////////////////////////////
-                              MODIFIERS
-    //////////////////////////////////////////////////////////////*/
 
     modifier onlyOwner() {
         if (msg.sender != owner) {
@@ -132,10 +106,6 @@ contract TokenLaunchpad {
         locked = 1;
     }
 
-    /*//////////////////////////////////////////////////////////////
-                              CONSTRUCTOR
-    //////////////////////////////////////////////////////////////*/
-
     constructor(address _feeRecipient, uint256 _platformFeeBps) {
         if (_feeRecipient == address(0)) {
             revert ZeroAddress();
@@ -151,10 +121,6 @@ contract TokenLaunchpad {
 
         platformFeeBps = _platformFeeBps;
     }
-
-    /*//////////////////////////////////////////////////////////////
-                              CREATE SALE
-    //////////////////////////////////////////////////////////////*/
 
     function createSale(
         address token,
@@ -189,10 +155,6 @@ contract TokenLaunchpad {
         emit SaleCreated(saleId, msg.sender, token);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                                  BUY
-    //////////////////////////////////////////////////////////////*/
-
     function buy(uint256 saleId) external payable {
         Sale storage sale = _getSale(saleId);
 
@@ -208,19 +170,11 @@ contract TokenLaunchpad {
             revert ZeroPayment();
         }
 
-        /*//////////////////////////////////////////////////////////
-                            WALLET LIMIT
-        //////////////////////////////////////////////////////////*/
-
         uint256 newContribution = contributions[saleId][msg.sender] + msg.value;
 
         if (newContribution > sale.walletLimit) {
             revert WalletLimitExceeded();
         }
-
-        /*//////////////////////////////////////////////////////////
-                              HARD CAP
-        //////////////////////////////////////////////////////////*/
 
         uint256 newTotalRaised = sale.totalRaised + msg.value;
 
@@ -228,33 +182,11 @@ contract TokenLaunchpad {
             revert HardCapExceeded();
         }
 
-        /*//////////////////////////////////////////////////////////
-                         EXACT PAYMENT
-        //////////////////////////////////////////////////////////*/
-
-        /*
-         * price represents the amount of wei
-         * required to buy one whole token.
-         *
-         * Example:
-         *
-         * price = 0.001 ether
-         *
-         * 0.001 ETH = 1 token
-         * 0.01 ETH  = 10 tokens
-         * 1 ETH     = 1000 tokens
-         */
-
         if (msg.value % sale.price != 0) {
             revert IncorrectPayment();
         }
 
         uint256 wholeTokens = msg.value / sale.price;
-
-        /*
-         * Current implementation assumes
-         * the sale token has 18 decimals.
-         */
 
         uint256 tokenAmount = wholeTokens * 1e18;
 
@@ -263,10 +195,6 @@ contract TokenLaunchpad {
         if (newTokensSold > sale.allocation) {
             revert AllocationExceeded();
         }
-
-        /*//////////////////////////////////////////////////////////
-                               EFFECTS
-        //////////////////////////////////////////////////////////*/
 
         contributions[saleId][msg.sender] = newContribution;
 
@@ -278,10 +206,6 @@ contract TokenLaunchpad {
 
         emit TokensPurchased(saleId, msg.sender, msg.value, tokenAmount);
     }
-
-    /*//////////////////////////////////////////////////////////////
-                                CLAIM
-    //////////////////////////////////////////////////////////////*/
 
     function claim(uint256 saleId) external nonReentrant {
         Sale storage sale = _getSale(saleId);
@@ -312,10 +236,6 @@ contract TokenLaunchpad {
         emit TokensClaimed(saleId, msg.sender, amount);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                         WITHDRAW PROCEEDS
-    //////////////////////////////////////////////////////////////*/
-
     function withdrawProceeds(uint256 saleId) external onlyOwner nonReentrant {
         Sale storage sale = _getSale(saleId);
 
@@ -345,10 +265,6 @@ contract TokenLaunchpad {
         emit ProceedsWithdrawn(saleId, owner, creatorAmount, fee);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                      RECOVER UNSOLD TOKENS
-    //////////////////////////////////////////////////////////////*/
-
     function recoverUnsoldTokens(uint256 saleId) external onlyOwner nonReentrant {
         Sale storage sale = _getSale(saleId);
 
@@ -361,14 +277,6 @@ contract TokenLaunchpad {
         }
 
         sale.unsoldRecovered = true;
-
-        /*
-         * Only recover tokens that were
-         * never sold.
-         *
-         * Sold tokens remain reserved
-         * for buyers who haven't claimed.
-         */
 
         uint256 unsold = sale.allocation - sale.totalTokensSold;
 
@@ -383,10 +291,6 @@ contract TokenLaunchpad {
         emit UnsoldTokensRecovered(saleId, owner, unsold);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                              GET SALE
-    //////////////////////////////////////////////////////////////*/
-
     function getSale(uint256 saleId) external view returns (Sale memory) {
         if (saleId >= nextSaleId) {
             revert SaleDoesNotExist();
@@ -394,10 +298,6 @@ contract TokenLaunchpad {
 
         return sales[saleId];
     }
-
-    /*//////////////////////////////////////////////////////////////
-                       INTERNAL VALIDATION
-    //////////////////////////////////////////////////////////////*/
 
     function _validateSale(
         address token,
@@ -432,10 +332,6 @@ contract TokenLaunchpad {
             revert InvalidWalletLimit();
         }
     }
-
-    /*//////////////////////////////////////////////////////////////
-                         INTERNAL FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
 
     function _getSale(uint256 saleId) internal view returns (Sale storage sale) {
         if (saleId >= nextSaleId) {

@@ -6,10 +6,6 @@ import {TokenLaunchpad} from "../src/TokenLaunchpad.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 
 contract TokenLaunchpadTest is Test {
-    /*//////////////////////////////////////////////////////////////
-                           STATE VARIABLES
-    //////////////////////////////////////////////////////////////*/
-
     TokenLaunchpad launchpad;
     MockERC20 token;
 
@@ -34,34 +30,14 @@ contract TokenLaunchpadTest is Test {
 
     uint256 saleId;
 
-    /*//////////////////////////////////////////////////////////////
-                                SETUP
-    //////////////////////////////////////////////////////////////*/
-
     function setUp() public {
-        /*
-         * Creator deploys the Launchpad.
-         *
-         * Therefore:
-         *
-         * owner == creator
-         */
-
         vm.prank(creator);
 
         launchpad = new TokenLaunchpad(feeRecipient, PLATFORM_FEE_BPS);
 
         token = new MockERC20();
 
-        /*
-         * Give creator the sale allocation.
-         */
-
         token.mint(creator, ALLOCATION);
-
-        /*
-         * Give buyers ETH.
-         */
 
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
@@ -71,11 +47,6 @@ contract TokenLaunchpadTest is Test {
 
         endTime = startTime + 7 days;
 
-        /*
-         * Creator approves Launchpad and
-         * creates the sale.
-         */
-
         vm.startPrank(creator);
 
         token.approve(address(launchpad), ALLOCATION);
@@ -84,10 +55,6 @@ contract TokenLaunchpadTest is Test {
 
         vm.stopPrank();
     }
-
-    /*//////////////////////////////////////////////////////////////
-                              OWNERSHIP
-    //////////////////////////////////////////////////////////////*/
 
     function testDeployerIsOwner() public view {
         assertEq(launchpad.owner(), creator);
@@ -114,10 +81,6 @@ contract TokenLaunchpadTest is Test {
 
         vm.stopPrank();
     }
-
-    /*//////////////////////////////////////////////////////////////
-                           CREATE SALE
-    //////////////////////////////////////////////////////////////*/
 
     function testCreateSale() public view {
         assertEq(launchpad.nextSaleId(), 1);
@@ -154,10 +117,6 @@ contract TokenLaunchpadTest is Test {
 
         assertFalse(sale.unsoldRecovered);
     }
-
-    /*//////////////////////////////////////////////////////////////
-                     INVALID SALE CONFIGURATION
-    //////////////////////////////////////////////////////////////*/
 
     function testCreateSaleRevertsForZeroToken() public {
         vm.prank(creator);
@@ -227,10 +186,6 @@ contract TokenLaunchpadTest is Test {
         launchpad.createSale(address(token), PRICE, ALLOCATION, startTime, endTime, HARD_CAP, HARD_CAP + 1 ether);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                           SALE WINDOWS
-    //////////////////////////////////////////////////////////////*/
-
     function testCannotBuyBeforeStart() public {
         vm.prank(alice);
 
@@ -269,22 +224,12 @@ contract TokenLaunchpadTest is Test {
         launchpad.buy{value: 1 ether}(saleId);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                                BUY
-    //////////////////////////////////////////////////////////////*/
-
     function testBuyTokens() public {
         vm.warp(startTime);
 
         vm.prank(alice);
 
         launchpad.buy{value: 1 ether}(saleId);
-
-        /*
-         * price = 0.001 ETH/token
-         *
-         * 1 ETH = 1000 tokens
-         */
 
         assertEq(launchpad.purchasedTokens(saleId, alice), 1_000 ether);
 
@@ -321,10 +266,6 @@ contract TokenLaunchpadTest is Test {
         assertEq(launchpad.purchasedTokens(saleId, bob), 2_000 ether);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                           WALLET LIMIT
-    //////////////////////////////////////////////////////////////*/
-
     function testCanReachExactWalletLimit() public {
         vm.warp(startTime);
 
@@ -353,17 +294,8 @@ contract TokenLaunchpadTest is Test {
         vm.stopPrank();
     }
 
-    /*//////////////////////////////////////////////////////////////
-                              HARD CAP
-    //////////////////////////////////////////////////////////////*/
-
     function testCanReachExactHardCap() public {
         vm.warp(startTime);
-
-        /*
-         * 10 wallets × 5 ETH
-         * = exact 50 ETH hard cap.
-         */
 
         for (uint256 i = 0; i < 10; i++) {
             address buyer = makeAddr(string.concat("buyer", vm.toString(i)));
@@ -403,10 +335,6 @@ contract TokenLaunchpadTest is Test {
 
         launchpad.buy{value: PRICE}(saleId);
     }
-
-    /*//////////////////////////////////////////////////////////////
-                              CLAIMING
-    //////////////////////////////////////////////////////////////*/
 
     function testCannotClaimBeforeSaleEnds() public {
         vm.warp(startTime);
@@ -470,10 +398,6 @@ contract TokenLaunchpadTest is Test {
         vm.stopPrank();
     }
 
-    /*//////////////////////////////////////////////////////////////
-                        WITHDRAWAL ACCESS
-    //////////////////////////////////////////////////////////////*/
-
     function testNonOwnerCannotWithdraw() public {
         vm.warp(endTime);
 
@@ -498,10 +422,6 @@ contract TokenLaunchpadTest is Test {
         launchpad.withdrawProceeds(saleId);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                       PROCEEDS + PLATFORM FEE
-    //////////////////////////////////////////////////////////////*/
-
     function testOwnerWithdrawsProceeds() public {
         vm.warp(startTime);
 
@@ -518,13 +438,6 @@ contract TokenLaunchpadTest is Test {
         vm.prank(creator);
 
         launchpad.withdrawProceeds(saleId);
-
-        /*
-         * 2% of 5 ETH = 0.1 ETH
-         *
-         * Creator:
-         * 5 - 0.1 = 4.9 ETH
-         */
 
         assertEq(creator.balance - creatorBefore, 4.9 ether);
 
@@ -552,10 +465,6 @@ contract TokenLaunchpadTest is Test {
 
         vm.stopPrank();
     }
-
-    /*//////////////////////////////////////////////////////////////
-                       UNSOLD TOKEN RECOVERY
-    //////////////////////////////////////////////////////////////*/
 
     function testNonOwnerCannotRecoverUnsoldTokens() public {
         vm.warp(endTime);
@@ -590,22 +499,9 @@ contract TokenLaunchpadTest is Test {
 
         launchpad.recoverUnsoldTokens(saleId);
 
-        /*
-         * Owner gets only unsold tokens.
-         */
-
         assertEq(token.balanceOf(creator), ALLOCATION - sold);
 
-        /*
-         * Purchased tokens stay inside
-         * Launchpad for Alice.
-         */
-
         assertEq(token.balanceOf(address(launchpad)), sold);
-
-        /*
-         * Alice can still claim.
-         */
 
         vm.prank(alice);
 
@@ -630,10 +526,6 @@ contract TokenLaunchpadTest is Test {
         vm.stopPrank();
     }
 
-    /*//////////////////////////////////////////////////////////////
-                         INVALID SALE ID
-    //////////////////////////////////////////////////////////////*/
-
     function testInvalidSaleIdReverts() public {
         uint256 invalidSaleId = 100;
 
@@ -646,22 +538,8 @@ contract TokenLaunchpadTest is Test {
         launchpad.buy{value: 1 ether}(invalidSaleId);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                              FUZZING
-    //////////////////////////////////////////////////////////////*/
-
     function testFuzzBuyWithinWalletLimit(uint256 numberOfTokens) public {
         vm.warp(startTime);
-
-        /*
-         * Since:
-         *
-         * PRICE = 0.001 ETH
-         * WALLET_LIMIT = 5 ETH
-         *
-         * maximum whole tokens purchasable
-         * by one wallet = 5000.
-         */
 
         numberOfTokens = bound(numberOfTokens, 1, WALLET_LIMIT / PRICE);
 
@@ -709,10 +587,6 @@ contract TokenLaunchpadTest is Test {
 
         uint256 newEnd = newStart + 1 days;
 
-        /*
-         * Give creator another 2 tokens.
-         */
-
         token.mint(creator, smallAllocation);
 
         vm.startPrank(creator);
@@ -726,18 +600,9 @@ contract TokenLaunchpadTest is Test {
 
         vm.warp(newStart);
 
-        /*
-         * Alice buys the entire allocation:
-         * 2 tokens.
-         */
-
         vm.prank(alice);
 
         launchpad.buy{value: 2 * PRICE}(smallSaleId);
-
-        /*
-         * Bob attempts to buy another token.
-         */
 
         vm.prank(bob);
 
