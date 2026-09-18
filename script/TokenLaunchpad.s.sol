@@ -5,7 +5,7 @@ import {Script} from "forge-std/Script.sol";
 
 import {TokenLaunchpad} from "../src/TokenLaunchpad.sol";
 
-contract TokenLaunchpadScript is Script {
+contract DeployTokenLaunchpad is Script {
     TokenLaunchpad public tokenLaunchpad;
 
     uint256 public constant PLATFORM_FEE_BPS = 200; // 2%
