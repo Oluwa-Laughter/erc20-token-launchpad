@@ -1,16 +1,31 @@
 # Token Launchpad
 
+An owner-controlled, non-minting ERC-20 token sale contract built with
+Solidity and Foundry. Sale tokens are deposited into the launchpad before a
+sale begins, buyers purchase allocations with ETH, and buyers claim their
+tokens after the sale ends.
+
 ## Contents
 
-- [Purpose](#purpose)
+- [Overview](#overview)
 - [Architecture](#architecture)
+- [Purpose](#purpose)
+- [Sale Lifecycle](#sale-lifecycle)
 - [Sale State](#sale-state)
 - [Access Control](#access-control)
 - [Purchase Accounting](#purchase-accounting)
 - [Time Window](#time-window)
 - [Safety Checks](#safety-checks)
+- [Implementation Notes](#implementation-notes)
 - [Foundry Proof](#foundry-proof)
 - [Development](#development)
+
+## Overview
+
+The launchpad manages multiple independent sales using a sale ID. Each sale
+defines its token, price, allocation, sale window, hard cap, and per-wallet
+limit. The contract holds the sale tokens during the sale and records buyer
+allocations until they are claimed.
 
 ## Purpose
 
@@ -21,30 +36,56 @@ proceeds can only be withdrawn after the sale ends.
 
 ## Architecture
 
-```text
-                    Token Launchpad
-                          |
-             +------------+------------+
-             |                         |
-        Sale Creator                 Buyers
-             |                         |
-      Creates sale                Purchase tokens
-      Funds allocation            Track allocation
-             |                         |
-             +------------+------------+
-                          |
-                     Sale ends
-                          |
-              +-----------+-----------+
-              |                       |
-         Buyers claim          Owner withdraws
-           tokens                 proceeds
-                                      |
-                              Recover unsold tokens
+```mermaid
+flowchart TD
+    Owner[Owner / Sale Creator]
+    Launchpad[TokenLaunchpad]
+    Token[ERC-20 Token]
+    Buyer[Buyer]
+    FeeRecipient[Fee Recipient]
+
+    Owner -->|approve and createSale| Launchpad
+    Token -->|allocation via transferFrom| Launchpad
+    Buyer -->|buy with ETH during sale window| Launchpad
+    Launchpad -->|record contribution and token allocation| Buyer
+    Launchpad -->|claim after sale ends| Token
+    Launchpad -->|withdrawProceeds| Owner
+    Launchpad -->|platform fee| FeeRecipient
+    Launchpad -->|recoverUnsoldTokens| Owner
 ```
 
-The launchpad is non-minting. The sale tokens already exist and are
-transferred into the launchpad when the sale is created.
+The launchpad is non-minting. Before calling `createSale`, the owner must
+approve the launchpad to transfer the sale allocation. The launchpad then
+holds the tokens while recording purchases, and transfers purchased tokens
+to buyers only after the sale ends.
+
+## Sale Lifecycle
+
+### 1. Create and fund a sale
+
+The owner configures the sale and deposits the full token allocation through
+`transferFrom`. The sale receives a unique ID and cannot start immediately;
+its start time must be in the future.
+
+### 2. Accept purchases
+
+During the active interval, buyers send ETH to `buy(saleId)`. The contract
+records each buyer's contribution and purchased token amount without
+transferring tokens yet.
+
+### 3. End the sale
+
+At `endTime`, purchases stop. The interval is `[startTime, endTime)`, so a
+purchase at `startTime` is valid and a purchase at exactly `endTime` is
+rejected.
+
+### 4. Settle the sale
+
+After the sale ends:
+
+- buyers call `claim(saleId)` to receive purchased tokens
+- the owner calls `withdrawProceeds(saleId)` to distribute ETH
+- the owner calls `recoverUnsoldTokens(saleId)` to retrieve the remainder
 
 ## Sale State
 
@@ -138,6 +179,31 @@ Purchases enforce:
 Buyer allocations are stored rather than transferring sale tokens
 immediately. This separates the purchase phase from the claim phase.
 
+## Implementation Notes
+
+### Stack-Depth Refactor
+
+The initial design exposed a large public struct getter and a large
+`SaleCreated` event. This contributed to a `stack too deep` compilation
+issue.
+
+The implementation was simplified by:
+
+- making the sale mapping private
+- adding an explicit `getSale()` function
+- reducing `SaleCreated` to important indexed identifiers
+- assigning struct fields through storage rather than a large struct
+  literal
+
+This reduced compiler pressure while keeping the API readable.
+
+### Proceeds and Fees
+
+When proceeds are withdrawn, the configured platform fee is calculated in
+basis points and sent to `feeRecipient`. The remaining ETH is sent to the
+owner. Both withdrawals and unsold-token recovery are available only after
+the sale ends and can each be performed once per sale.
+
 ## Foundry Proof
 
 The test suite verifies:
@@ -162,55 +228,55 @@ Foundry consists of:
 - **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
 - **Chisel**: Fast, utilitarian, and verbose solidity REPL.
 
-## Documentation
+### Documentation
 
 https://book.getfoundry.sh/
 
-## Usage
+### Usage
 
-### Build
+#### Build
 
 ```shell
 $ forge build
 ```
 
-### Test
+#### Test
 
 ```shell
 $ forge test
 ```
 
-### Format
+#### Format
 
 ```shell
 $ forge fmt
 ```
 
-### Gas Snapshots
+#### Gas Snapshots
 
 ```shell
 $ forge snapshot
 ```
 
-### Anvil
+#### Anvil
 
 ```shell
 $ anvil
 ```
 
-### Deploy
+#### Deploy
 
 ```shell
 $ forge script script/DeployTokenLaunchpad.s.sol:DeployTokenLaunchpad --rpc-url <your_rpc_url> --private-key <your_private_key>
 ```
 
-### Cast
+#### Cast
 
 ```shell
 $ cast <subcommand>
 ```
 
-### Help
+#### Help
 
 ```shell
 $ forge --help
